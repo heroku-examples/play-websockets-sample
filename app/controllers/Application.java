@@ -1,38 +1,39 @@
 package controllers;
 
-import play.*;
-import play.mvc.*;
-import play.libs.*;
-
-import views.html.*;
-
-import akka.actor.*;
-import akka.japi.Creator;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import models.Pinger;
+import play.libs.Akka;
+import play.libs.F.Callback0;
+import play.mvc.Controller;
+import play.mvc.Result;
+import play.mvc.WebSocket;
 import scala.concurrent.duration.Duration;
-import static java.util.concurrent.TimeUnit.*;
-
-import models.*;
+import views.html.index;
+import akka.actor.ActorRef;
+import akka.actor.Cancellable;
+import akka.actor.Props;
 
 public class Application extends Controller {
     public static WebSocket<String> pingWs() {
         return new WebSocket<String>() {
-            Cancellable cancellable;
-
             public void onReady(WebSocket.In<String> in, WebSocket.Out<String> out) {
-                ActorRef pingActor = Akka.system().actorOf(Props.create(Pinger.class, in, out));
-                cancellable =
-                    Akka.system().scheduler().schedule(Duration.create(1, SECONDS),
-                                                       Duration.create(1, SECONDS),
-                                                       pingActor,
-                                                       "Tick",
-                                                       Akka.system().dispatcher(),
-                                                       null
-                                                       );
+                final ActorRef pingActor = Akka.system().actorOf(Props.create(Pinger.class, in, out));
+                final Cancellable cancellable = Akka.system().scheduler().schedule(Duration.create(1, SECONDS),
+                                                   Duration.create(1, SECONDS),
+                                                   pingActor,
+                                                   "Tick",
+                                                   Akka.system().dispatcher(),
+                                                   null
+                                                   );
+                
+                in.onClose(new Callback0() {
+                	@Override
+                	public void invoke() throws Throwable {
+                		cancellable.cancel();
+                	}
+                });
             }
 
-            public void onClose() {
-                cancellable.cancel();
-            }
         };
     }
 
